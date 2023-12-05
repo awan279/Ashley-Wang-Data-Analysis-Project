@@ -1,0 +1,387 @@
+---
+title: "Exploratory Data Analysis"
+author: "Ashley Wang, Ellen Cheng"
+date: "2023-10-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(knitr)
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(ggpubr)
+```
+
+```{r}
+getwd()
+# income vs amount of people under poverty line
+# sort state based on proportion of people under poverty line
+# poverty line and race
+# income vs sex & gender
+
+sub_housing <- read.csv("social explore.csv")
+
+income_by_race <- read.csv("income by race.csv")
+
+income_by_race_2017 <- income_by_race %>%
+  filter(year == 2017)
+```
+
+```{r}
+# cleaning the dataset (join, remove missing values, etc.)
+
+column_names <- colnames(sub_housing)
+print(column_names)
+
+
+colnames(sub_housing)[colnames(sub_housing) == "Percentage.of.the.Population.Below.Poverty.Level.in.the.Census.Tract.Where.HUD.Assisted.Families.Reside..Summary.of.all.HUD.Programs."] <- "percent_poverty"
+sub_housing <- sub_housing[,-1]
+sub_housing <- sub_housing[-1,]
+colnames(sub_housing)[colnames(sub_housing) == "Name.of.Area"] <- "name" #we will join two datasets by "name"
+
+sub_housing <- sub_housing[,-2:-11] # delete unnecessary columns
+
+income_and_sub_housing <- full_join(income_by_race_2017, sub_housing, by = "name")
+
+income_and_sub_housing <- income_and_sub_housing[complete.cases(income_and_sub_housing$geoid), ] 
+
+colnames(income_and_sub_housing)[colnames(income_and_sub_housing) == "aian_est"] <- "Native American"
+colnames(income_and_sub_housing)[colnames(income_and_sub_housing) == "asian_est"] <- "Asian"
+colnames(income_and_sub_housing)[colnames(income_and_sub_housing) == "black_est"] <- "Black"
+colnames(income_and_sub_housing)[colnames(income_and_sub_housing) == "hisp_est"] <- "Hispanic or Latino"
+colnames(income_and_sub_housing)[colnames(income_and_sub_housing) == "white_est"] <- "White"
+
+
+mydata <- income_and_sub_housing[,c(2:4,6,10,12,14,26,28:36)]
+colnames(mydata)[colnames(mydata) == "total_est"] <- "Overall"
+
+colnames(mydata)[colnames(mydata) == "People.in.Subsidized.Housing..Summary.of.all.HUD.Programs."] <- "number_indiv_subsidized"
+colnames(mydata)[colnames(mydata) == "Average.Individual.Income.Per.Year..All.Individuals.in.Subsidized.Housing.Units...Summary.of.all.HUD.Programs."] <- "avg_indiv_income_subsidized"
+colnames(mydata)[colnames(mydata) == "Aggregate.Household.Income..All.Households.in.Subsidized.Housing.Units...Summary.of.all.HUD.Programs."] <- "household_income_subsidized"
+colnames(mydata)[colnames(mydata) == "Average.Family.Expenditure.per.month..Payment.toward.Rent.and.Utilities...Summary.of.all.HUD.Programs."] <- "family_expenditure"
+colnames(mydata)[colnames(mydata) == "Average.HUD.Expenditure.per.month..Federal.Spending...Summary.of.all.HUD.Programs."] <- "federal_spending"
+colnames(mydata)[colnames(mydata) == "Households.in.Subsidized.Housing..Summary.of.all.HUD.Programs."] <- "number_households_subsidized"
+colnames(mydata)[colnames(mydata) == "Households.in.Subsidized.Housing..Households.Headed.by.Female..Summary.of.all.HUD.Programs."] <- "household_female_head"
+colnames(mydata)[colnames(mydata) == "Households.in.Subsidized.Housing..Households.Headed.by.a.Female.With.Children..Summary.of.all.HUD.Programs."] <- "household_female_head_with_children"
+
+
+print(colnames(mydata[17]))
+
+sorted_income <- mydata[order(mydata$Overall), ] 
+sorted_income <- sorted_income[,c(1:8)] # states from lowest overall income to highest
+
+sorted_poverty <- mydata[order(mydata$percent_poverty),]
+sorted_poverty <- sorted_poverty[,c(1,14)] # states with lowest percent poverty to highest
+
+```
+```{r}
+mydata$percent_poverty <- as.numeric(mydata$percent_poverty)
+is.numeric(mydata$percent_poverty)
+```
+
+```{r}
+# scatterplot -- total_est against percent_poverty
+
+mydata %>%
+ggplot(aes(x=Overall, y=percent_poverty))+
+  geom_point() + 
+  geom_smooth(method = "lm", se = FALSE, color = "purple") +
+  stat_cor(method = "pearson", label.x = 70000, label.y = 30) +
+  xlab("Average Income") + 
+  ylab("Percent Below Poverty Line") +
+  ggtitle("Average Income by State vs Percent of Population Below Poverty Line")
+
+
+```
+
+```{r}
+mydata %>%
+ggplot(aes(x=White, y=Black))+
+  geom_point() + 
+  xlab("Average Income for White Population") + 
+  ylab("Average Income for Black Population") +
+  ggtitle("Comparing Avg Income between White and Black Populations")
+```
+
+
+```{r}
+new_col <- c("ESC","P","M","WSC","P","M","NE","SA","SA","SA","SA","P","M","ENC","ENC","WNC","WNC","ESC","WSC","NE","SA","NE","ENC","WNC","ESC","WNC","M","WNC","M","NE","MA","M","MA","SA","WNC","ENC","WSC","P","MA","NE","SA","WNC","ESC","WSC","M","NE","SA","P","SA","ENC","M")
+
+mydata$region <- new_col
+
+mydata$region[mydata$region == "ESC"] <- "East South Central"
+mydata$region[mydata$region == "P"] <- "Pacific"
+mydata$region[mydata$region == "M"] <- "Mountain"
+mydata$region[mydata$region == "WSC"] <- "West South Central"
+mydata$region[mydata$region == "NE"] <- "New England"
+mydata$region[mydata$region == "SA"] <- "South Atlantic"
+mydata$region[mydata$region == "ENC"] <- "East North Central"
+mydata$region[mydata$region == "WNC"] <- "West North Central"
+mydata$region[mydata$region == "MA"] <- "Middle Atlantic"
+```
+
+```{r}
+avg_income_by_region <- mydata %>%
+  group_by(region) %>%
+  summarise(avg_income = mean(Overall))
+```
+
+```{r}
+
+avg_income_by_region %>%
+  ggplot(aes(x= region, y = avg_income)) +
+  geom_col() + 
+  labs(title = "Average Income by US Region",
+       x = "Region",
+       y = "Average Income")
+```
+```{r}
+
+# Some things to note: 
+# Missing values for average income for Black people in Wyoming (why would this be?)
+# If you take a look at the dataset I created called "sorted_income" it orders states from lowest overall income to greatest overall income -- maybe there are some patterns we can discover based on region, state demographic, etc. Not sure what the best visualization might be for this, but we can definitely still discuss things we notice in the draft. 
+# Similar thing for dataset called "sorted_poverty" -- gives states with lowest percentage of poverty rate to highest
+# I've printed the two "sorted" datasets below for you to take a look at! Let me know if you have any ideas on how to visualize these or if anything doesn't make sense.
+# Also I wasn't able to find any info about sex/gender in the datasets we used and I also don't really know how to code to "split" each state into "male" and "female" (like dividing them), maybe if we wanted to incorporate sex or gender, we can talk to Dr. Palermo. 
+
+print(sorted_income)
+```
+
+```{r}
+print(sorted_poverty)
+```
+
+```{r}
+getwd()
+act_scores <- read.csv("ACT data.csv")
+
+col_act <- colnames(act_scores)
+print(col_act)
+
+colnames(act_scores)[colnames(act_scores) == "Common.Core.Standards.Status"] <- "common_core"
+colnames(act_scores)[colnames(act_scores) == "Students.Meeting.ACT.Math.Benchmark"] <- "math_benchmark_met"
+colnames(act_scores)[colnames(act_scores) == "Students.Meeting.ACT.English.Benchmark"] <- "eng_benchmark_met"
+
+act_scores <- act_scores[,-5]
+```
+
+```{r}
+# add District of Columbia to act_scores dataframe with missing values (so we can combine with mydata) # should be row 9
+
+# First, split act_scores into two dataframes, slicing through row number 9 (because we are trying to insert a new row in this specific location)
+
+df1 <- act_scores[1:8, ]
+df2 <- act_scores[9:50, ]
+
+# Create new row for District of Columbia
+
+new_row <- data.frame(State = "District of Columbia", common_core = "NA", math_benchmark_met = "NA", eng_benchmark_met = "NA")
+
+# Now we can insert with rbind().
+
+act_scores <- rbind(df1, new_row, df2)
+
+# Reset the indexing numbers
+
+rownames(act_scores) <- NULL
+
+```
+
+```{r}
+# Combine act_scores with mydata
+
+colnames(act_scores)[colnames(act_scores) == "State"] <- "name"
+mydata <- full_join(act_scores, mydata, by = "name")
+
+colnames(mydata)[colnames(mydata) == "math_benchmark_met"] <- "math"
+colnames(mydata)[colnames(mydata) == "eng_benchmark_met"] <- "english"
+mydata <- full_join(act_scores, mydata, by = "name")
+
+
+```
+
+```{r}
+file_path <- "mydata.csv"
+write.csv(mydata, file = file_path, row.names = FALSE)
+```
+
+```{r}
+# the percentages of math and englih were strings in the dataset, so i converted them into numeric values to be able to calculate the mean of the two, and create a new column that gives the overall proportion of those who passed
+mydata$math <- as.numeric(sub("%", "", mydata$math))
+mydata$math <- mydata$math / 100
+
+mydata$english <- as.numeric(sub("%", "", mydata$english))
+mydata$english <- mydata$english / 100
+
+mydata <- mydata %>%
+  mutate(math_english_avg = (math + english) / 2)
+```
+
+```{r}
+mydata %>%
+ggplot(aes(x=Overall, y=math_english_avg))+
+  geom_point() + 
+  geom_smooth(method = "lm", se = FALSE, color = "orange") +
+  stat_cor(method = "pearson", label.x = 40000, label.y = 0.85) +
+  xlab("Average Income") + 
+  ylab("Proportion of Students") +
+  ggtitle("Average Income by State vs Proportion of Students Meeting ACT Benchmark")
+```
+```{r}
+# import education funding by state into R
+funding <- read.csv("education funding.csv")
+funding <- funding[c(1:51),]
+```
+
+```{r}
+# renaming columns of funding dataset
+print(colnames(funding))
+
+colnames(funding)[colnames(funding) == "K.12.Spending"] <- "k12_spending"
+colnames(funding)[colnames(funding) == "Postsecondary.spending"] <- "postsecondary_spending"
+colnames(funding)[colnames(funding) == "Federal.Funding"] <- "fed_funding"
+colnames(funding)[colnames(funding) == "State...Local.Funding"] <- "local_funding"
+colnames(funding)[colnames(funding) == "State"] <- "name"
+```
+
+```{r}
+# join funding dataset with mydata dataset
+mydata2 <- full_join(mydata, funding, by = "name")
+```
+
+```{r}
+# visualization: scatterplot of math_english_avg against k12_spending
+
+range(mydata2$k12_spending)
+class(mydata2$k12_spending)
+
+# convert k12_spending from character vector to numeric vector to perform potentially required mathematical operations
+mydata2$k12_spending <- sub("\\$", "", mydata2$k12_spending)
+mydata2$k12_spending <- sub(",", "", mydata2$k12_spending)
+mydata2$k12_spending <- as.numeric(mydata2$k12_spending)
+range(mydata2$k12_spending)
+
+# create visualization with line of best fit and correlation coefficient
+mydata2 %>%
+ggplot(aes(x=k12_spending, y=math_english_avg))+
+  geom_point() + 
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  stat_cor(method = "pearson", label.x = 8500, label.y = 0.85) +
+  xlab("Spending of K-12 Schools") + 
+  ylab("Proportion of Students Meeting Benchmark Requirement") +
+  ggtitle("School Spending vs Benchmark Satisfaction")
+
+```
+We can see that there is a significant positive correlation between the amount of money K-12 schools in each state spend and the proportion of that state's students meeting the ACT benchmark requirement. Thus, further research should look at the spending patterns of K-12 schools, by state, and how it affects nationwide disparities in education. 
+
+```{r}
+# import private and public schools dataset (to analyze ratio by state)
+public_schools <- read.csv("publicschools_new.csv")
+private_schools <- read.csv("privateschools_updated.csv")
+```
+
+```{r}
+# clean up the two new datasets
+colnames(public_schools)
+colnames(public_schools)[colnames(public_schools) == "Table.2..Number.of.operating.public..schools.and.districts..state.enrollment..teacher.and.pupil.teacher."] <- "name"
+colnames(public_schools)[colnames(public_schools) == "X"] <- "number_public_schools"
+colnames(public_schools)[colnames(public_schools) == "X.3"] <- "number_public_students"
+public_schools <- public_schools[-c(1:3),]
+public_schools <- public_schools[,c(1,2,5)]
+public_schools <- public_schools[-1,]
+rownames(public_schools) <- NULL
+
+colnames(private_schools)
+colnames(private_schools)[colnames(private_schools) == "Table.15..Number.of.private.schools..students..full.time.equivalent..FTE..teachers..and.2018.19.high.school.graduates..by.state..United.States..2019.20"] <- "name"
+colnames(private_schools)[colnames(private_schools) == "X"] <- "number_private_schools"
+colnames(private_schools)[colnames(private_schools) == "X.2"] <- "number_private_students"
+private_schools <- private_schools[-c(1,2),]
+private_schools <- private_schools[,c(1,2,4)]
+rownames(private_schools) <- NULL
+```
+
+```{r}
+# check what type of vectors the datasets have
+
+is.numeric(private_schools$number_private_schools)
+is.character(private_schools$number_private_schools)
+private_schools$number_private_schools <- sub(",", "", private_schools$number_private_schools)
+private_schools$number_private_students <- sub(",", "", private_schools$number_private_students)
+as.numeric(private_schools$number_private_schools)
+as.numeric(private_schools$number_private_students)
+private_schools <- private_schools[,-4]
+
+public_schools$number_public_schools <- sub(",", "", public_schools$number_public_schools)
+public_schools$number_public_students <- sub(",", "", public_schools$number_public_students)
+public_schools$number_public_students <- sub(",", "", public_schools$number_public_students)
+as.numeric(public_schools$number_public_schools)
+as.numeric(public_schools$number_public_students)
+public_schools <- public_schools[,-4]
+```
+
+```{r}
+# join public and private datasets
+schooling <- full_join(public_schools, private_schools, by = "name")
+```
+
+```{r}
+# join schooling dataset with main dataset
+mydata3 <- full_join(mydata2, schooling, by = "name")
+
+# find proportion: private schools over total schools, private students over total students
+
+
+mydata3$number_public_schools <- as.numeric(mydata3$number_public_schools)
+mydata3$number_private_schools <- as.numeric(mydata3$number_private_schools)
+mydata3$number_public_students <- as.numeric(mydata3$number_public_students)
+mydata3$number_private_students <- as.numeric(mydata3$number_private_students)
+
+pubschool_vec <- mydata3$number_public_schools
+
+total_schools <- mydata3$number_public_schools + mydata3$number_private_schools
+mydata3 <- cbind(mydata3, total_schools)
+
+total_students <- mydata3$number_public_students + mydata3$number_private_students
+mydata3 <- cbind(mydata3, total_students)
+
+school_prop <- mydata3$number_private_schools/mydata3$total_schools
+school_prop <- round(school_prop, 2)
+mydata3 <- cbind(mydata3, school_prop)
+
+student_prop <- round(mydata3$number_private_students/mydata3$total_students, 2)
+mydata3 <- cbind(mydata3, student_prop)
+```
+
+```{r}
+# visualization showing association between proportion of students enrolled in private k12 schools & proportion of students meeting benchmark 
+
+mydata3 %>%
+ggplot(aes(x=student_prop, y=math_english_avg))+
+  geom_point() + 
+  geom_smooth(method = "lm", se = FALSE, color = "purple") +
+  stat_cor(method = "pearson", label.x = 0.01, label.y = 0.85) +
+  xlab("Proportion of Students Enrolled in Private School") + 
+  ylab("Proportion of Students Meeting Benchmark Requirement") +
+  ggtitle("Private School Enrollment vs Benchmark Satisfaction")
+
+# weak positive correlation that is not statistically significant (maybe this points us to an issue that standardized testing is not reflective of students' academic prowess which might introduce another potential problem to investigate... but it could also mean that private schooling doesn't really have an effect on academic performance, but these are all general umbrella statements made just to outline some thoughts)
+```
+
+```{r}
+# does a significant association exist between private school enrollment and overall income?
+
+mydata3 %>%
+ggplot(aes(x=student_prop, y=Overall))+
+  geom_point() + 
+  geom_smooth(method = "lm", se = FALSE, color = "hotpink") +
+  stat_cor(method = "pearson", label.x = 0.01, label.y = 80000) +
+  xlab("Proportion of Students Enrolled in Private School") + 
+  ylab("Overall Income by State") +
+  ggtitle("Private School Enrollment vs Overall Income")
+
+# this is a moderate positive correlation that is statistically significant with p = 0.031 < alpha = 0.05. We can def talk about this (since higher SES --> access to private schools, and private school enrollment gives you a better chance at making more money)
+```
+
